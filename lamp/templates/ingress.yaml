@@ -1,12 +1,21 @@
-{{- if .Values.ingress.enabled }}
-{{- if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "lamp.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- if and .Values.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
+  {{- if not (hasKey .Values.ingress.annotations "kubernetes.io/ingress.class") }}
+  {{- $_ := set .Values.ingress.annotations "kubernetes.io/ingress.class" .Values.ingress.className}}
+  {{- end }}
+{{- end }}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
 apiVersion: networking.k8s.io/v1beta1
 {{- else -}}
 apiVersion: extensions/v1beta1
 {{- end }}
 kind: Ingress
 metadata:
-  name: {{ template "lamp.fullname" . }}-app
+  name:  {{ $fullName }}
   annotations:
     {{- if .Values.ingress.ssl }}
     kubernetes.io/tls-acme: "true"
@@ -20,7 +29,6 @@ metadata:
     ingress.kubernetes.io/configuration-snippet: |
       rewrite ^(.*)$ $scheme://www.{{ template "lamp.domain" . }}$1;
     {{- end }}
-{{ toYaml .Values.ingress.annotations | indent 4 }}
 spec:
   {{- if .Values.ingress.ssl }}
   tls:
@@ -33,7 +41,10 @@ spec:
     http:
       paths:
       - path: /
+        pathType: Prefix
         backend:
-          serviceName: {{ template "lamp.fullname" . }}
-          servicePort: {{ .Values.service.HTTPPort }}
+          service:
+            name:  {{ template "lamp.fullname" . }}
+            port:
+              number: {{ .Values.service.HTTPPort }}
 {{- end }}
